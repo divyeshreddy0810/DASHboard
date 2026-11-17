@@ -17,7 +17,6 @@ import {
   XAxis,
   YAxis,
 } from "recharts";
-import { useSlot } from "../colors";
 import { formatCompact, formatFull } from "../format";
 import { useTheme, type Theme } from "../theme";
 import type { ChartData, RenderedChart } from "../types";
@@ -59,8 +58,7 @@ function Kpi({ data }: { data: ChartData }) {
 function Categorical({ chart, data, theme }: { chart: RenderedChart["spec"]; data: ChartData; theme: Theme }) {
   const keys = data.keys ?? [];
   const rows = data.rows ?? [];
-  const slot = useSlot();
-  const color = (k: string, i: number) => theme.series[keys.length > 1 ? slot(k, i) : 0];
+  const color = (k: string, i: number) => theme.series[keys.length > 1 ? (data.slots?.[k] ?? i) % 8 : 0];
   const showLegend = keys.length > 1;
   const common = { data: rows, margin: { top: 8, right: 12, bottom: 4, left: 0 } };
   const grid = <CartesianGrid stroke={theme.grid} vertical={false} />;
@@ -112,7 +110,6 @@ function Categorical({ chart, data, theme }: { chart: RenderedChart["spec"]; dat
 function Donut({ data, theme }: { data: ChartData; theme: Theme }) {
   const key = data.keys?.[0] ?? "value";
   const rows = data.rows ?? [];
-  const slot = useSlot();
   return (
     <PieChart>
       <Tooltip {...tooltipProps(theme)} />
@@ -120,7 +117,7 @@ function Donut({ data, theme }: { data: ChartData; theme: Theme }) {
       <Pie data={rows} dataKey={key} nameKey="x" innerRadius="55%" outerRadius="85%"
            stroke={theme.surface} strokeWidth={2} isAnimationActive={false}>
         {rows.map((r, i) => (
-          <Cell key={i} fill={theme.series[slot(String(r.x), i)]} />
+          <Cell key={i} fill={theme.series[(data.slots?.[String(r.x)] ?? i) % 8]} />
         ))}
       </Pie>
     </PieChart>
@@ -130,7 +127,6 @@ function Donut({ data, theme }: { data: ChartData; theme: Theme }) {
 function ScatterPlot({ chart, data, theme }: { chart: RenderedChart["spec"]; data: ChartData; theme: Theme }) {
   const keys = data.keys ?? [];
   const points = data.points ?? [];
-  const slot = useSlot();
   return (
     <ScatterChart margin={{ top: 8, right: 12, bottom: 4, left: 0 }}>
       <CartesianGrid stroke={theme.grid} />
@@ -140,7 +136,7 @@ function ScatterPlot({ chart, data, theme }: { chart: RenderedChart["spec"]; dat
       <Tooltip {...tooltipProps(theme)} cursor={{ strokeDasharray: "3 3", stroke: theme.axis }} />
       {keys.length > 1 && <Legend wrapperStyle={{ fontSize: 12 }} iconType="circle" iconSize={8} />}
       {keys.map((k, i) => (
-        <Scatter key={k} name={k} data={points.filter((p) => p.series === k)} fill={theme.series[keys.length > 1 ? slot(k, i) : 0]}
+        <Scatter key={k} name={k} data={points.filter((p) => p.series === k)} fill={theme.series[keys.length > 1 ? (data.slots?.[k] ?? i) % 8 : 0]}
                  fillOpacity={0.7} isAnimationActive={false} />
       ))}
     </ScatterChart>
@@ -169,7 +165,13 @@ function DataTable({ data }: { data: ChartData }) {
   );
 }
 
-export function ChartCard({ chart }: { chart: RenderedChart }) {
+interface CardProps {
+  chart: RenderedChart;
+  onRemove?: () => void;
+  onDragStart?: (e: React.DragEvent) => void;
+}
+
+export function ChartCard({ chart, onRemove, onDragStart }: CardProps) {
   const theme = useTheme();
   const { spec, data, error } = chart;
 
@@ -195,10 +197,17 @@ export function ChartCard({ chart }: { chart: RenderedChart }) {
   }
 
   return (
-    <section className={`card w-${spec.width} type-${spec.type}`}>
-      <header>
+    <section className={`card type-${spec.type}`}>
+      <header draggable={!!onDragStart} onDragStart={onDragStart} className={onDragStart ? "handle" : undefined}>
         <h3 title={spec.rationale}>{spec.title}</h3>
-        {data?.truncated && <span className="badge">top {data.rows?.length}</span>}
+        <div className="card-tools">
+          {data?.truncated && <span className="badge">top {data.rows?.length}</span>}
+          {onRemove && (
+            <button type="button" className="icon" aria-label={`Remove ${spec.title}`} onClick={onRemove}>
+              ×
+            </button>
+          )}
+        </div>
       </header>
       {body}
     </section>

@@ -1,4 +1,8 @@
-import type { Dashboard, DashboardSummary } from "./types";
+import type { ChartSpec, Dashboard, DashboardSummary } from "./types";
+
+function json(method: string, body: unknown): RequestInit {
+  return { method, headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) };
+}
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const res = await fetch(path, init);
@@ -33,17 +37,18 @@ export const api = {
     return request<Dashboard>("/api/dashboards", { method: "POST", body: form });
   },
 
-  rename: (id: string, title: string) =>
-    request<Dashboard>(`/api/dashboards/${id}`, {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ title }),
-    }),
+  rename: (id: string, title: string) => request<Dashboard>(`/api/dashboards/${id}`, json("PATCH", { title })),
 
-  chat: (id: string, message: string) =>
-    request<Dashboard>(`/api/dashboards/${id}/chat`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ message }),
-    }),
+  chat: (id: string, message: string) => request<Dashboard>(`/api/dashboards/${id}/chat`, json("POST", { message })),
+
+  suggestions: (id: string) => request<ChartSpec[]>(`/api/dashboards/${id}/suggestions`),
+
+  addChart: (id: string, chart: ChartSpec, index?: number) =>
+    request<Dashboard>(`/api/dashboards/${id}/charts`, json("POST", { chart, index })),
+
+  moveChart: (id: string, chartId: string, index: number) =>
+    request<Dashboard>(`/api/dashboards/${id}/charts/${encodeURIComponent(chartId)}/move`, json("POST", { index })),
+
+  removeChart: (id: string, chartId: string) =>
+    request<Dashboard>(`/api/dashboards/${id}/charts/${encodeURIComponent(chartId)}`, { method: "DELETE" }),
 };

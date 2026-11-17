@@ -248,19 +248,36 @@ def _table(df: pd.DataFrame, chart: ChartSpec) -> Dict[str, Any]:
     return {"columns": cols, "rows": rows}
 
 
+def _color_slots(df: pd.DataFrame, column: str, names: List[str]) -> Dict[str, int]:
+    # Slot by frequency in the full column, so a category keeps its color in
+    # every chart and across reloads, whatever the chart's own sort or filters.
+    s = df[column]
+    order = s.astype(str).where(s.notna(), "(blank)").value_counts().index
+    rank = {str(v): i for i, v in enumerate(order)}
+    return {n: rank.get(n, i) % 8 for i, n in enumerate(names)}
+
+
 def compute_chart(df: pd.DataFrame, chart: ChartSpec) -> Dict[str, Any]:
+    full = df
     df = apply_filters(df, chart.filters)
     if chart.type == "kpi":
         return _kpi(df, chart)
-    if chart.type in ("bar", "line", "area", "pie"):
-        return _categorical(df, chart)
     if chart.type == "histogram":
         return _histogram(df, chart)
-    if chart.type == "scatter":
-        return _scatter(df, chart)
     if chart.type == "table":
         return _table(df, chart)
-    raise ChartError(f"Unsupported chart type {chart.type}")
+    if chart.type in ("bar", "line", "area", "pie"):
+        out = _categorical(df, chart)
+    elif chart.type == "scatter":
+        out = _scatter(df, chart)
+    else:
+        raise ChartError(f"Unsupported chart type {chart.type}")
+
+    if chart.type == "pie" and chart.x:
+        out["slots"] = _color_slots(full, chart.x, [r["x"] for r in out["rows"]])
+    elif chart.series and len(out["keys"]) > 1:
+        out["slots"] = _color_slots(full, chart.series, out["keys"])
+    return out
 
 
 def render_dashboard(df: pd.DataFrame, charts: List[ChartSpec]) -> List[Dict[str, Any]]:

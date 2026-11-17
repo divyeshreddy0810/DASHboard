@@ -66,3 +66,7 @@ class PlannerResult(BaseModel):
         description="Short, plain-English message to the user about what was built or changed."
     )
     dashboard: DashboardSpec
+    suggestions: List[ChartSpec] = Field(
+        default_factory=list,
+        description="6 to 10 further comparisons the user may want to add, not already on the dashboard, most relevant to their goal first.",
+    )

@@ -1,11 +1,11 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { api } from "./api";
-import { SlotContext, assignSlots, type SlotMap } from "./colors";
-import { ChartCard } from "./components/ChartCard";
+import { Board } from "./components/Board";
 import { ChatPanel } from "./components/ChatPanel";
+import { Suggestions } from "./components/Suggestions";
 import { TitleEditor } from "./components/TitleEditor";
 import { UploadForm } from "./components/UploadForm";
-import type { Dashboard, DashboardSummary } from "./types";
+import type { ChartSpec, Dashboard, DashboardSummary } from "./types";
 
 function dashboardIdFromHash(): string | null {
   const m = window.location.hash.match(/^#\/d\/([\w-]+)/);
@@ -18,15 +18,8 @@ export default function App() {
   const [recent, setRecent] = useState<DashboardSummary[]>([]);
   const [planner, setPlanner] = useState<string>("");
   const [busy, setBusy] = useState(false);
+  const [suggestions, setSuggestions] = useState<ChartSpec[] | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const slots = useRef<{ id: string; map: SlotMap }>({ id: "", map: new Map() });
-
-  if (dashboard && slots.current.id !== dashboard.id) {
-    slots.current = { id: dashboard.id, map: new Map() };
-  }
-  if (dashboard) {
-    slots.current.map = assignSlots(dashboard.charts, slots.current.map);
-  }
 
   useEffect(() => {
     const onHash = () => setCurrentId(dashboardIdFromHash());
@@ -47,6 +40,27 @@ export default function App() {
     }
     api.getDashboard(currentId).then(setDashboard).catch((e: Error) => setError(e.message));
   }, [currentId]);
+
+  useEffect(() => {
+    if (!dashboard) return;
+    let stale = false;
+    api
+      .suggestions(dashboard.id)
+      .then((items) => !stale && setSuggestions(items))
+      .catch(() => !stale && setSuggestions([]));
+    return () => {
+      stale = true;
+    };
+  }, [dashboard?.id, dashboard?.updated_at]);
+
+  const apply = useCallback(async (fn: () => Promise<Dashboard>) => {
+    setError(null);
+    try {
+      setDashboard(await fn());
+    } catch (e) {
+      setError((e as Error).message);
+    }
+  }, []);
 
   const run = useCallback(async (fn: () => Promise<Dashboard>) => {
     setBusy(true);
@@ -113,20 +127,26 @@ export default function App() {
         <div className="workspace">
           <main className="board">
             {dashboard.description && <p className="board-desc">{dashboard.description}</p>}
-            <SlotContext.Provider value={slots.current.map}>
-              <div className="grid">
-                {dashboard.charts.map((c) => (
-                  <ChartCard key={c.spec.id} chart={c} />
-                ))}
-              </div>
-            </SlotContext.Provider>
+            <Board
+              charts={dashboard.charts}
+              onAdd={(chart, index) => apply(() => api.addChart(dashboard.id, chart, index))}
+              onMove={(chartId, index) => apply(() => api.moveChart(dashboard.id, chartId, index))}
+              onRemove={(chartId) => apply(() => api.removeChart(dashboard.id, chartId))}
+            />
           </main>
-          <ChatPanel
-            history={dashboard.history}
-            busy={busy}
-            disabled={planner === "heuristic" ? "Chat editing needs ANTHROPIC_API_KEY set on the backend." : undefined}
-            onSend={(m) => run(() => api.chat(dashboard.id, m))}
-          />
+          <aside className="side">
+            <Suggestions
+              items={suggestions}
+              busy={busy}
+              onAdd={(chart) => apply(() => api.addChart(dashboard.id, chart))}
+            />
+            <ChatPanel
+              history={dashboard.history}
+              busy={busy}
+              disabled={planner === "heuristic" ? "Chat editing needs ANTHROPIC_API_KEY set on the backend." : undefined}
+              onSend={(m) => run(() => api.chat(dashboard.id, m))}
+            />
+          </aside>
         </div>
       )}
     </div>

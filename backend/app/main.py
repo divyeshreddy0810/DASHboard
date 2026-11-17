@@ -10,8 +10,9 @@ from pydantic import BaseModel
 from .engine import render_dashboard
 from .planner import PlannerUnavailable, default_planner
 from .profiling import UnsupportedFile, profile_frame, read_table
-from .spec import DashboardSpec
+from .spec import ChartSpec, DashboardSpec
 from .store import Store
+from .suggestions import suggest
 
 MAX_UPLOAD_BYTES = int(os.environ.get("DASHBOARD_MAX_UPLOAD_MB", "50")) * 1024 * 1024
 
@@ -47,6 +48,26 @@ class ChatRequest(BaseModel):
 
 class DashboardPatch(BaseModel):
     title: str
+
+
+class AddChart(BaseModel):
+    chart: ChartSpec
+    index: Optional[int] = None
+
+
+class MoveChart(BaseModel):
+    index: int
+
+
+def _record_or_404(store: Store, db_id: str) -> dict:
+    record = store.get_dashboard(db_id)
+    if record is None:
+        raise HTTPException(404, "Dashboard not found.")
+    return record
+
+
+def _requirements(record: dict) -> str:
+    return " ".join(m["content"] for m in record.get("history", []) if m["role"] == "user")
 
 
 def _view(store: Store, record: dict) -> dict:
@@ -129,23 +150,20 @@ def create_dashboard(
         "history": history,
         "planner": planner.name,
         "title": title or None,
+        "suggestions": [c.model_dump() for c in result.suggestions],
     })
     return _view(store, record)
 
 
 @app.get("/api/dashboards/{db_id}")
 def get_dashboard(db_id: str, store: Store = Depends(get_store)):
-    record = store.get_dashboard(db_id)
-    if record is None:
-        raise HTTPException(404, "Dashboard not found.")
+    record = _record_or_404(store, db_id)
     return _view(store, record)
 
 
 @app.patch("/api/dashboards/{db_id}")
 def update_dashboard(db_id: str, body: DashboardPatch, store: Store = Depends(get_store)):
-    record = store.get_dashboard(db_id)
-    if record is None:
-        raise HTTPException(404, "Dashboard not found.")
+    record = _record_or_404(store, db_id)
     title = body.title.strip()
     if not title:
         raise HTTPException(400, "Title can't be empty.")
@@ -156,9 +174,7 @@ def update_dashboard(db_id: str, body: DashboardPatch, store: Store = Depends(ge
 
 @app.put("/api/dashboards/{db_id}/spec")
 def replace_spec(db_id: str, spec: DashboardSpec, store: Store = Depends(get_store)):
-    record = store.get_dashboard(db_id)
-    if record is None:
-        raise HTTPException(404, "Dashboard not found.")
+    record = _record_or_404(store, db_id)
     record["spec"] = spec.model_dump()
     if record.get("title"):
         record["title"] = spec.title
@@ -167,9 +183,7 @@ def replace_spec(db_id: str, spec: DashboardSpec, store: Store = Depends(get_sto
 
 @app.post("/api/dashboards/{db_id}/chat")
 def chat(db_id: str, body: ChatRequest, store: Store = Depends(get_store), planner=Depends(get_planner)):
-    record = store.get_dashboard(db_id)
-    if record is None:
-        raise HTTPException(404, "Dashboard not found.")
+    record = _record_or_404(store, db_id)
     message = body.message.strip()
     if not message:
         raise HTTPException(400, "Message is empty.")
@@ -182,8 +196,61 @@ def chat(db_id: str, body: ChatRequest, store: Store = Depends(get_store), plann
     if record.get("title"):
         result.dashboard.title = record["title"]
     record["spec"] = result.dashboard.model_dump()
+    record["suggestions"] = [c.model_dump() for c in result.suggestions]
     record.setdefault("history", []).extend([
         {"role": "user", "content": message},
         {"role": "assistant", "content": result.reply},
     ])
+    return _view(store, store.save_dashboard(record))
+
+
+@app.get("/api/dashboards/{db_id}/suggestions")
+def list_suggestions(db_id: str, store: Store = Depends(get_store)):
+    record = _record_or_404(store, db_id)
+    meta = store.get_dataset(record["dataset_id"])
+    preferred = [ChartSpec.model_validate(c) for c in record.get("suggestions", [])]
+    charts = suggest(meta["profile"], Store.spec_of(record).charts, _requirements(record), preferred)
+    return [c.model_dump() for c in charts]
+
+
+@app.post("/api/dashboards/{db_id}/charts")
+def add_chart(db_id: str, body: AddChart, store: Store = Depends(get_store)):
+    record = _record_or_404(store, db_id)
+    spec = Store.spec_of(record)
+    chart = body.chart
+    ids = {c.id for c in spec.charts}
+    if chart.id in ids:
+        n = 2
+        while f"{chart.id}-{n}" in ids:
+            n += 1
+        chart = chart.model_copy(update={"id": f"{chart.id}-{n}"})
+    index = len(spec.charts) if body.index is None else max(0, min(body.index, len(spec.charts)))
+    spec.charts.insert(index, chart)
+    record["spec"] = spec.model_dump()
+    return _view(store, store.save_dashboard(record))
+
+
+@app.post("/api/dashboards/{db_id}/charts/{chart_id}/move")
+def move_chart(db_id: str, chart_id: str, body: MoveChart, store: Store = Depends(get_store)):
+    record = _record_or_404(store, db_id)
+    spec = Store.spec_of(record)
+    pos = next((i for i, c in enumerate(spec.charts) if c.id == chart_id), None)
+    if pos is None:
+        raise HTTPException(404, "Chart not found.")
+    chart = spec.charts.pop(pos)
+    index = max(0, min(body.index if body.index <= pos else body.index - 1, len(spec.charts)))
+    spec.charts.insert(index, chart)
+    record["spec"] = spec.model_dump()
+    return _view(store, store.save_dashboard(record))
+
+
+@app.delete("/api/dashboards/{db_id}/charts/{chart_id}")
+def remove_chart(db_id: str, chart_id: str, store: Store = Depends(get_store)):
+    record = _record_or_404(store, db_id)
+    spec = Store.spec_of(record)
+    remaining = [c for c in spec.charts if c.id != chart_id]
+    if len(remaining) == len(spec.charts):
+        raise HTTPException(404, "Chart not found.")
+    spec.charts = remaining
+    record["spec"] = spec.model_dump()
     return _view(store, store.save_dashboard(record))

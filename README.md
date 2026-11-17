@@ -18,8 +18,13 @@ Current scope is file uploads (CSV, TSV, Excel, JSON). Database connectors come 
 3. **Compute** – `backend/app/engine.py` runs each chart spec against the data
    (filters, grouping, time buckets, aggregation) and returns only what the chart
    draws.
-4. **Edit** – chat messages go back to the planner with the current spec, and the
-   updated spec is recomputed.
+4. **Suggest** – `backend/app/suggestions.py` lists further comparisons the user can
+   drag onto the dashboard (breakdowns, trends split by category, two-dimension
+   comparisons, relationships), ranked against the goal and chat requests. Claude's
+   own suggestions go first when it is enabled.
+5. **Edit** – chat messages go back to the planner with the current spec, and the
+   updated spec is recomputed. Charts can also be added, reordered and removed
+   directly.
 
 Dashboards are stored as specs, so they can be recomputed when the data changes.
 
@@ -61,9 +66,14 @@ npm run dev   # http://localhost:5173, proxies /api to :8000
 |---|---|---|
 | `POST` | `/api/datasets` | Upload a file (multipart `file`) |
 | `GET` | `/api/datasets/{id}` | Dataset metadata and profile |
-| `POST` | `/api/dashboards` | Create from `dataset_id`, optional `goal` |
+| `POST` | `/api/dashboards` | Create from `dataset_id`, `title`, optional `goal` |
 | `GET` | `/api/dashboards/{id}` | Spec plus computed chart data |
+| `PATCH` | `/api/dashboards/{id}` | `{"title": "..."}` – rename |
 | `POST` | `/api/dashboards/{id}/chat` | `{"message": "..."}` – edit the dashboard |
+| `GET` | `/api/dashboards/{id}/suggestions` | Charts that could be added |
+| `POST` | `/api/dashboards/{id}/charts` | `{"chart": {...}, "index": 3}` – add a chart |
+| `POST` | `/api/dashboards/{id}/charts/{chart_id}/move` | `{"index": 0}` – reorder |
+| `DELETE` | `/api/dashboards/{id}/charts/{chart_id}` | Remove a chart |
 | `PUT` | `/api/dashboards/{id}/spec` | Replace the spec directly |
 
 ## Tests
@@ -75,6 +85,7 @@ cd backend && ../.venv/bin/python -m pytest
 ## Roadmap
 
 - [x] File upload, profiling, chart selection, chat edits
+- [x] Suggested comparisons with drag and drop
 - [ ] Connectors: Postgres, MySQL, BigQuery, MongoDB, Redshift/Athena
 - [ ] Saved dashboards that refresh on a schedule
 - [ ] Auth, encrypted credential storage, multi-user, deployment

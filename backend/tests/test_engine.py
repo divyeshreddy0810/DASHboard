@@ -73,3 +73,11 @@ def test_histogram_integer_bins_are_labelled_by_value(df):
     rows = compute_chart(df, ChartSpec(id="h", type="histogram", title="t", x="customer_rating"))["rows"]
     assert [r["x"] for r in rows] == ["1", "2", "3", "4", "5"]
     assert rows[0]["count"] == (df["customer_rating"] == 1).sum()
+
+
+def test_color_slots_follow_the_category_not_the_chart(df):
+    pie = compute_chart(df, ChartSpec(id="p", type="pie", title="t", x="region", y="revenue"))
+    line = compute_chart(df, ChartSpec(id="l", type="line", title="t", x="order_date", y="profit",
+                                       series="region", filters=[Filter(column="channel", op="eq", values=["Online"])]))
+    assert pie["slots"] == {k: line["slots"][k] for k in pie["slots"]}
+    assert pie["slots"][df["region"].value_counts().index[0]] == 0

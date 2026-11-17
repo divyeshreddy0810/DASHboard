@@ -33,6 +33,10 @@ Rules:
 - Give each chart a short, specific title and a one-sentence rationale.
 - When editing, change only what the user asked for and keep every other chart's id and settings. \
 If the request can't be done with this data, keep the dashboard as it is and say why in reply.
+- suggestions are extra charts the user can drag onto the dashboard. Make them comparisons that \
+answer the user's stated goal and earlier requests: breakdowns by other dimensions, trends split by \
+category, two-dimension comparisons, relationships between measures. Don't repeat charts already on \
+the dashboard.
 - reply is one to three plain sentences addressed to the user."""
 
 

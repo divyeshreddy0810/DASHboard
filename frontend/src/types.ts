@@ -12,6 +12,7 @@ export interface ChartSpec {
   limit: number | null;
   width: "third" | "half" | "full";
   rationale: string;
+  [extra: string]: unknown;
 }
 
 export type Row = Record<string, string | number | null>;
@@ -24,6 +25,7 @@ export interface ChartData {
   points?: { x: number; y: number; series: string }[];
   columns?: string[];
   truncated?: boolean;
+  slots?: Record<string, number>;
 }
 
 export interface RenderedChart {

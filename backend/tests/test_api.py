@@ -25,7 +25,11 @@ class FakeMessages:
             dashboard["charts"].append(
                 {"id": "by-region", "type": "bar", "title": "Revenue by region", "x": "region", "y": "revenue"}
             )
-        parsed = PlannerResult.model_validate({"reply": "Done.", "dashboard": dashboard})
+        suggestions = [{"id": "profit-by-channel", "type": "bar", "title": "Profit by channel",
+                        "x": "channel", "y": "profit"}]
+        parsed = PlannerResult.model_validate(
+            {"reply": "Done.", "dashboard": dashboard, "suggestions": suggestions}
+        )
         return SimpleNamespace(stop_reason="end_turn", parsed_output=parsed)
 
 
@@ -90,6 +94,9 @@ def test_claude_planner_edit_flow(client, sample_bytes, monkeypatch):
     assert [m["role"] for m in body["history"]] == ["user", "assistant", "user", "assistant"]
     assert body["title"] == "Q4 review"
 
+    suggestions = client.get(f"/api/dashboards/{db['id']}/suggestions").json()
+    assert suggestions[0]["id"] == "profit-by-channel"
+
     call = fake.calls[-1]
     assert call["model"] == "claude-opus-5-5"
     assert call["output_format"] is PlannerResult
@@ -113,3 +120,36 @@ def test_title_defaults_to_planner_title(client, sample_bytes):
     ds = _upload(client, sample_bytes)
     db = client.post("/api/dashboards", data={"dataset_id": ds["id"]}).json()
     assert db["title"] == "Sales overview"
+
+
+def test_suggest_add_move_remove(client, sample_bytes):
+    ds = _upload(client, sample_bytes)
+    db = client.post("/api/dashboards", data={"dataset_id": ds["id"], "title": "Sales"}).json()
+    ids = [c["spec"]["id"] for c in db["charts"]]
+
+    suggestions = client.get(f"/api/dashboards/{db['id']}/suggestions").json()
+    assert suggestions
+    pick = suggestions[0]
+
+    res = client.post(f"/api/dashboards/{db['id']}/charts", json={"chart": pick, "index": 3})
+    assert res.status_code == 200
+    charts = res.json()["charts"]
+    assert charts[3]["spec"]["id"] == pick["id"]
+    assert charts[3]["error"] is None
+
+    after = client.get(f"/api/dashboards/{db['id']}/suggestions").json()
+    assert pick["id"] not in [s["id"] for s in after]
+
+    dup = client.post(f"/api/dashboards/{db['id']}/charts", json={"chart": pick}).json()
+    assert dup["charts"][-1]["spec"]["id"] == f"{pick['id']}-2"
+
+    moved = client.post(f"/api/dashboards/{db['id']}/charts/{pick['id']}/move", json={"index": 0}).json()
+    assert moved["charts"][0]["spec"]["id"] == pick["id"]
+
+    last = len(moved["charts"])
+    moved = client.post(f"/api/dashboards/{db['id']}/charts/{pick['id']}/move", json={"index": last}).json()
+    assert moved["charts"][-1]["spec"]["id"] == pick["id"]
+
+    removed = client.delete(f"/api/dashboards/{db['id']}/charts/{pick['id']}").json()
+    assert [c["spec"]["id"] for c in removed["charts"]] == ids + [f"{pick['id']}-2"]
+    assert client.delete(f"/api/dashboards/{db['id']}/charts/nope").status_code == 404

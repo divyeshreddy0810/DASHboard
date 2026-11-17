@@ -30,7 +30,7 @@ export function ChatPanel({ history, busy, disabled, onSend }: Props) {
   };
 
   return (
-    <aside className="chat">
+    <section className="chat">
       <h2>Edit with chat</h2>
       <div className="chat-log" ref={listRef}>
         {history.map((m, i) => (
@@ -71,6 +71,6 @@ export function ChatPanel({ history, busy, disabled, onSend }: Props) {
           </form>
         </>
       )}
-    </aside>
+    </section>
   );
 }
