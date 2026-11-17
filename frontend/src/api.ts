@@ -21,16 +21,24 @@ export const api = {
 
   getDashboard: (id: string) => request<Dashboard>(`/api/dashboards/${id}`),
 
-  async createFromFile(file: File, goal: string): Promise<Dashboard> {
+  async createFromFile(file: File, title: string, goal: string): Promise<Dashboard> {
     const upload = new FormData();
     upload.append("file", file);
     const dataset = await request<{ id: string }>("/api/datasets", { method: "POST", body: upload });
 
     const form = new FormData();
     form.append("dataset_id", dataset.id);
+    if (title.trim()) form.append("title", title.trim());
     if (goal.trim()) form.append("goal", goal.trim());
     return request<Dashboard>("/api/dashboards", { method: "POST", body: form });
   },
+
+  rename: (id: string, title: string) =>
+    request<Dashboard>(`/api/dashboards/${id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ title }),
+    }),
 
   chat: (id: string, message: string) =>
     request<Dashboard>(`/api/dashboards/${id}/chat`, {

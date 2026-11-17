@@ -2,11 +2,12 @@ import { useRef, useState } from "react";
 
 interface Props {
   busy: boolean;
-  onSubmit: (file: File, goal: string) => void;
+  onSubmit: (file: File, title: string, goal: string) => void;
 }
 
 export function UploadForm({ busy, onSubmit }: Props) {
   const [file, setFile] = useState<File | null>(null);
+  const [title, setTitle] = useState("");
   const [goal, setGoal] = useState("");
   const [dragging, setDragging] = useState(false);
   const input = useRef<HTMLInputElement>(null);
@@ -16,7 +17,7 @@ export function UploadForm({ busy, onSubmit }: Props) {
       className="upload"
       onSubmit={(e) => {
         e.preventDefault();
-        if (file) onSubmit(file, goal);
+        if (file && title.trim()) onSubmit(file, title.trim(), goal);
       }}
     >
       <div
@@ -50,6 +51,17 @@ export function UploadForm({ busy, onSubmit }: Props) {
         )}
       </div>
       <label>
+        Dashboard title
+        <input
+          type="text"
+          value={title}
+          required
+          maxLength={120}
+          placeholder="e.g. Q4 sales review"
+          onChange={(e) => setTitle(e.target.value)}
+        />
+      </label>
+      <label>
         What do you want to know? <span className="optional">(optional)</span>
         <input
           type="text"
@@ -58,7 +70,7 @@ export function UploadForm({ busy, onSubmit }: Props) {
           onChange={(e) => setGoal(e.target.value)}
         />
       </label>
-      <button type="submit" disabled={!file || busy}>
+      <button type="submit" disabled={!file || !title.trim() || busy}>
         {busy ? "Building dashboard…" : "Build dashboard"}
       </button>
     </form>

@@ -45,6 +45,10 @@ class ChatRequest(BaseModel):
     message: str
 
 
+class DashboardPatch(BaseModel):
+    title: str
+
+
 def _view(store: Store, record: dict) -> dict:
     spec = Store.spec_of(record)
     df = store.frame(record["dataset_id"])
@@ -100,6 +104,7 @@ def list_dashboards(store: Store = Depends(get_store)):
 @app.post("/api/dashboards", status_code=201)
 def create_dashboard(
     dataset_id: str = Form(...),
+    title: Optional[str] = Form(None),
     goal: Optional[str] = Form(None),
     store: Store = Depends(get_store),
     planner=Depends(get_planner),
@@ -111,6 +116,9 @@ def create_dashboard(
         result = planner.create(meta["profile"], meta["name"], goal)
     except PlannerUnavailable as exc:
         raise HTTPException(502, str(exc)) from exc
+    title = (title or "").strip()
+    if title:
+        result.dashboard.title = title
     history = []
     if goal:
         history.append({"role": "user", "content": goal})
@@ -120,6 +128,7 @@ def create_dashboard(
         "spec": result.dashboard.model_dump(),
         "history": history,
         "planner": planner.name,
+        "title": title or None,
     })
     return _view(store, record)
 
@@ -132,12 +141,27 @@ def get_dashboard(db_id: str, store: Store = Depends(get_store)):
     return _view(store, record)
 
 
+@app.patch("/api/dashboards/{db_id}")
+def update_dashboard(db_id: str, body: DashboardPatch, store: Store = Depends(get_store)):
+    record = store.get_dashboard(db_id)
+    if record is None:
+        raise HTTPException(404, "Dashboard not found.")
+    title = body.title.strip()
+    if not title:
+        raise HTTPException(400, "Title can't be empty.")
+    record["title"] = title
+    record["spec"]["title"] = title
+    return _view(store, store.save_dashboard(record))
+
+
 @app.put("/api/dashboards/{db_id}/spec")
 def replace_spec(db_id: str, spec: DashboardSpec, store: Store = Depends(get_store)):
     record = store.get_dashboard(db_id)
     if record is None:
         raise HTTPException(404, "Dashboard not found.")
     record["spec"] = spec.model_dump()
+    if record.get("title"):
+        record["title"] = spec.title
     return _view(store, store.save_dashboard(record))
 
 
@@ -155,6 +179,8 @@ def chat(db_id: str, body: ChatRequest, store: Store = Depends(get_store), plann
                               record.get("history", []), message)
     except PlannerUnavailable as exc:
         raise HTTPException(502, str(exc)) from exc
+    if record.get("title"):
+        result.dashboard.title = record["title"]
     record["spec"] = result.dashboard.model_dump()
     record.setdefault("history", []).extend([
         {"role": "user", "content": message},

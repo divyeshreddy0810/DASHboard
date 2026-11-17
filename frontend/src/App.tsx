@@ -3,6 +3,7 @@ import { api } from "./api";
 import { SlotContext, assignSlots, type SlotMap } from "./colors";
 import { ChartCard } from "./components/ChartCard";
 import { ChatPanel } from "./components/ChatPanel";
+import { TitleEditor } from "./components/TitleEditor";
 import { UploadForm } from "./components/UploadForm";
 import type { Dashboard, DashboardSummary } from "./types";
 
@@ -64,7 +65,24 @@ export default function App() {
   return (
     <div className="app">
       <header className="topbar">
-        <a href="#/" className="brand">Dashboard</a>
+        {currentId && dashboard ? (
+          <div className="topbar-title">
+            <a href="#/" className="back" aria-label="All dashboards">←</a>
+            <TitleEditor
+              value={dashboard.title}
+              onSave={async (title) => {
+                try {
+                  setDashboard(await api.rename(dashboard.id, title));
+                } catch (e) {
+                  setError((e as Error).message);
+                  throw e;
+                }
+              }}
+            />
+          </div>
+        ) : (
+          <a href="#/" className="brand">Dashboard</a>
+        )}
         {planner && <span className="planner">planner: {planner}</span>}
       </header>
 
@@ -74,7 +92,7 @@ export default function App() {
         <main className="home">
           <h1>Build a dashboard from a file</h1>
           <p className="lede">Upload a dataset. The app profiles each column, picks the charts, and you can refine them by chat.</p>
-          <UploadForm busy={busy} onSubmit={(file, goal) => run(() => api.createFromFile(file, goal))} />
+          <UploadForm busy={busy} onSubmit={(file, title, goal) => run(() => api.createFromFile(file, title, goal))} />
           {recent.length > 0 && (
             <section className="recent">
               <h2>Recent dashboards</h2>
@@ -94,10 +112,7 @@ export default function App() {
       {currentId && dashboard && (
         <div className="workspace">
           <main className="board">
-            <div className="board-head">
-              <h1>{dashboard.title}</h1>
-              {dashboard.description && <p>{dashboard.description}</p>}
-            </div>
+            {dashboard.description && <p className="board-desc">{dashboard.description}</p>}
             <SlotContext.Provider value={slots.current.map}>
               <div className="grid">
                 {dashboard.charts.map((c) => (

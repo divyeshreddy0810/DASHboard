@@ -79,6 +79,23 @@ input[type="text"], textarea {
   background: var(--surface);
 }
 .brand { font-weight: 700; color: var(--text); text-decoration: none; }
+.topbar-title { display: flex; align-items: center; gap: 0.5rem; flex: 1; min-width: 0; margin-right: 1rem; }
+.back { color: var(--muted); text-decoration: none; font-size: 1.1rem; padding: 0 0.25rem; }
+.back:hover { color: var(--text); }
+.title-input {
+  font: inherit;
+  font-size: 1.15rem;
+  font-weight: 600;
+  width: 100%;
+  max-width: 640px;
+  padding: 0.2rem 0.4rem;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text);
+}
+.title-input:hover { border-color: var(--border); }
+.title-input:focus { outline: none; border-color: var(--accent); background: var(--surface); }
 .planner { font-size: 0.8rem; color: var(--muted); }
 
 .error {
@@ -127,8 +144,7 @@ input[type="text"], textarea {
   min-height: calc(100vh - 49px);
 }
 .board { padding: 1.25rem; }
-.board-head { margin-bottom: 1rem; }
-.board-head p { margin: 0.25rem 0 0; color: var(--text-2); }
+.board-desc { margin: 0 0 1rem; color: var(--text-2); }
 
 .grid {
   display: grid;
